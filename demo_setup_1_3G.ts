@@ -278,9 +278,15 @@ const connection = async (vm:VAPI.AT1130.Root, mode:"OneToOne"|"FillUp") =>{
   const pls = await vm.re_play.video.players.rows();
   const dlys = await vm.re_play.video.delays.rows();
   const rxvs = await vm.r_t_p_receiver.video_receivers.rows();
-  const dsks = (await vm.video_mixer.instances.rows()).filter(async (v_m) => await v_m.mode.read() === "LUMA_KEYER")
-  const vms = (await vm.video_mixer.instances.rows()).filter(async (v_m) => await v_m.mode.read() === "MIXER")
-  console.log("vm ", vms.length, "dsk ", dsks.length)
+  const raw_vms = await vm.video_mixer.instances.rows()
+  const dsks:VAPI.AT1130.VideoMixer.BSLKAsNamedTableRow[]=[] 
+  const vms:VAPI.AT1130.VideoMixer.BSLKAsNamedTableRow[]=[] 
+  await asyncIter(raw_vms, async (v_m)=>{
+    const mode = await v_m.mode.read()
+    if(mode === "LUMA_KEYER") dsks.push(v_m)
+    else vms.push(v_m)
+  })
+  await pause(new Duration(1 ,"s"))
   await asyncIter(PlayerSettings.replays, async (player, index) =>{
     if(player.type === "clip" && index < pls.length){
       const tx = txs.shift();
@@ -296,15 +302,12 @@ const connection = async (vm:VAPI.AT1130.Root, mode:"OneToOne"|"FillUp") =>{
     {
       const rel = player.related;
       const dsk = dsks.shift();
-      //const rxv = rxvs.shift();
+      const rxv = rxvs.shift();
       const out = outs.shift();
       if(dsk && rel < pls.length){
-        // await dsk.v_src0.command.write(rxv ? rxv.media_specific.output.video : vsg)
-        // await dsk.v_src1.command.write(pls[rel].output.video)
-        await dsk.v_src0.command.write(vsg)
-        await dsk.v_src1.command.write(vsg)
+        await dsk.v_src0.command.write(rxv ? rxv.media_specific.output.video : vsg)
+        await dsk.v_src1.command.write(pls[rel].output.video)
         await dsk.luma_keyer.v_src.command.write(pls[index].output.video)
-        console.log("ola ")
         if(out) await out.sdi.v_src.command.write(video_ref(dsk.output))
       }
   }})
