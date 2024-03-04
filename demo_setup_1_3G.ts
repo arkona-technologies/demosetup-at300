@@ -59,7 +59,7 @@ const MixerSettings: Mixer[] = [
 
 
 
-const USE_STD:Standard = "HD1080p50";
+const USE_STD:Standard = "HD1080p59_94"; //Insert videostandard that should be used for demo.
 const NUM_CC:number = 12;
 const NUM_RXTXS:number = 32;
 
