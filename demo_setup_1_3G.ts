@@ -24,8 +24,8 @@ const PlayerSettings: PS = {
   replays: [
       {name:"still_key", frames:1, type:"key", related:1},
       {name:"still_fill", frames:1, type:"fill"},
-      {name:"logo_animation_key", frames:100, type:"key", related:3},
-      {name:"logo_animation_fill", frames:100,leader:2, type:"fill"},
+      {name:"logo_animation_key", frames:150, type:"key", related:3},
+      {name:"logo_animation_fill", frames:1,leader:2, type:"fill"},
       {name:"clip1", frames:250, type:"clip"},
       {name:"clip2", frames:250, type:"clip"},
       {name:"clip3", frames:250, type:"clip"},
@@ -302,10 +302,12 @@ const connection = async (vm:VAPI.AT1130.Root, mode:"OneToOne"|"FillUp") =>{
     {
       const rel = player.related;
       const dsk = dsks.shift();
-      const rxv = rxvs.shift();
+      //const rxv = rxvs.shift();
+      const rxv = vm.r_t_p_receiver?.video_receivers.row(8);
       const out = outs.shift();
       if(dsk && rel < pls.length){
-        await dsk.v_src0.command.write(rxv ? rxv.media_specific.output.video : vsg)
+        //await dsk.v_src0.command.write(rxv ? rxv.media_specific.output.video : vsg)
+        await dsk.v_src0.command.write(rxv ? rxv.media_specific.output.video : vsg);
         await dsk.v_src1.command.write(pls[rel].output.video)
         await dsk.luma_keyer.v_src.command.write(pls[index].output.video)
         if(out) await out.sdi.v_src.command.write(video_ref(dsk.output))
