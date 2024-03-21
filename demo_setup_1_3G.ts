@@ -331,17 +331,24 @@ const check_and_upload_bids = async (vm: VAPI.AT1130.Root) => {
 		clip4: `clip_4_${std}_3G_250frames.bid`,
 	};
 	let checked = true;
+	const checkedDirs: boolean[] = [];
 	await asyncIter(Object.keys(availableFiles), async (dir) => {
+		const checkinDir: boolean[] = [];
 		await asyncIter(Object.entries(clipsStills), async ([key, file]) => {
 			if (file in availableFiles[dir]) {
-				// console.log("found file;", [dir, file].join("/"));
+				// console.log("found file:", [dir, file].join("/"));
 				clipsStills[key] = [dir, file].join("/");
+				checkinDir.push(true);
 			} else {
 				// console.log("file missing:", file);
-				checked = false;
+				checkinDir.push(false);
 			}
 		});
+		if (checkinDir.includes(false)) checkedDirs.push(false);
+		else checkedDirs.push(true);
 	});
+	checked = checkedDirs.includes(true);
+
 	console.log(
 		checked
 			? "Clips available on dongle, uploading..."
