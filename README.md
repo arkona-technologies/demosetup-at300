@@ -52,7 +52,10 @@ The internal signal routing of the blade can be seen here:
 All video signals can be used as sources for functions.
 However, video mixers should not be cascaded as they require shifted time sources. 
 These can be created manually, but are not initially intended for the demo setup. 
- 
+
+
+Routing as mermaid graph:
+
 ```mermaid
 graph LR
     still_key["internal player 0 - still key"]
@@ -68,10 +71,6 @@ graph LR
     cc2["color correction"]
     cc3["color correction"]
     ccs["color corrections"]
-    fs0["Frame Syncs"]
-    fs1["Frame Syncs"]
-    tx(("Transmitters (Tx)"))
-    rx(("Receivers (Rx)"))
     dsk00["DSK 0"]
     dsk01["DSK 0"]
     dsk10["DSK 1"]
@@ -81,9 +80,13 @@ graph LR
     sdi_out2["SDI Out 2"]
     sdi_out3["SDI Out 3"]
     sdi_out4["SDI Out 4 - 7"]
+    fs0["Frame Syncs"]
+    fs1["Frame Syncs"]
+    tx(("Transmitters (Tx)"))
+    rx(("Receivers (Rx)"))
     sdi_in["SDI 0 - 7"]
-    subgraph "Luma Keyer"
-      direction LR
+    subgraph "Keyer"
+    direction LR
       still_key --> dsk00 --> sdi_out0
       still_fill --> dsk01 --> sdi_out1
       logo_key --> dsk10 --> sdi_out2
