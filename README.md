@@ -12,15 +12,15 @@ The requirements for this demo are as follows:
 - compatible QSFP28 module
 - Formatted USB stick with the [sample clips](https://www.dropbox.com/scl/fo/rlgvdjcl8u2yadu79qaip/h?rlkey=y4b5w42qtikdqbszxe2ohnf2d&dl=0)
 
-> [!WARNING]
-> Please note! The clips may not be renamed and all files have to be copied to the root directory of the stick, not in folders/subdirectories.
+> [!IMPORTANT]
+> The clips may not be renamed and all files have to be copied to the root directory of the stick, not in folders/subdirectories.
 
 To start the demo setup, connect your at300 to the power supply, insert the USB stick with the video clips into 
 the front usb-c port and open the user interface. Now check in the dropdown menu whether you have loaded 
 the AVP app on your blade. If this is not the case, please boot your blade in the "AVP_100GbE" app. 
 
-> [!WARNING]
-> Please note! If you have previously set up the demo setup in a different video standard, please reset your blade once using the "Reset" button in the drop-down menu.
+> [!IMPORTANT]
+> If you have previously set up the demo setup in a different video standard, please reset your blade once using the "Reset" button in the drop-down menu.
 
 In the next step, please select "Demo setup #1" with the desired standard from the dropdown 
 menu under "Demo menu". Start the demo setup by clicking on "Demo Setup #1". 
@@ -50,7 +50,6 @@ The internal signal routing of the blade can be seen here:
 
 
 > [!NOTE]
->  Please note!
 > All video signals can be used as sources for functions.
 However, video mixers should not be cascaded as they require shifted time sources. 
 These can be created manually, but are not initially intended for the demo setup. 
