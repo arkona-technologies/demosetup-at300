@@ -181,6 +181,7 @@ const setup_sdi = async (vm: VAPI.AT1130.Root) => {
 	await asyncIter(await io.output.rows(), async (o) => {
 		await o.mode.command.write("SDI");
 		await o.sdi.t_src.command.write(gen);
+		await o.sdi.phase_target.command.write(new Duration(3, "µs"));
 	});
 };
 
