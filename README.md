@@ -1,4 +1,8 @@
-# AT300 - Demo Setup #1 (1080p50/1080p59.94)
+# Demo Setups
+
+This repository contains manuals and scripts for preconfigured BLADE//runner setups.
+
+## Demo Setup #1 (1080p50/1080p59.94)
 
 This demo setup is intended to provide an overview of the functions of the blade runner - at300 AVP app.
 It contains the functions video transmitter, video receiver, video delays (configured as frame synchronizer), color corrections and video mixer. The demo setup can be set up with the 1080p50 and 1080p59.94 standards.
@@ -26,6 +30,8 @@ In the next step, please select "Demo setup #1" with the desired standard from t
 menu under "Demo menu". Start the demo setup by clicking on "Demo Setup #1". 
 After the demo setup has been loaded, the blade is configured as follows:
 
+### Blade Configuration
+
 8x internal players with clips loaded from the USB stick:
 -	player 0 & 1: logo still - blade runner (key & fill)
 - player 2 & 3: logo animation (key & fill)
@@ -44,6 +50,8 @@ The at300 is booted in "Free Run" PTP mode and therefore requires no external PT
 
 Two of the four video mixers are configured as A/B video mixers, the others as luma keyers. 
 The luma keyers use the signals from video players 0-3 as key & fill signals. 
+
+### Routing
 
 The internal signal routing of the blade can be seen here:
 ![Routing](image.png)
@@ -111,3 +119,20 @@ graph LR
       rx --> sdi_out4
     end
 ```
+
+
+## Demo Setup #2 (1080p50/1080p59.94)
+
+This demo setup is mostly the same as the demo setup #1. The main difference is, that instead of one blade sending streams to itself it uses two cross-wired blades which send streams to each other.
+
+The base setup of each blade is identical as described in [demo setup #1 - Blade Configuration](#blade-configuration) with on difference: only SDI outputs 8 and 9 are configured to be able to utilize one 16bidi and one MSC2 IO module.
+
+As a result, the full requirements are:
+
+- 2x AT300 blade with the AVP app
+- 2x I/O module 
+- compatible QSFP28 module
+- 2x Formatted USB stick with the [sample clips](https://www.dropbox.com/scl/fo/rlgvdjcl8u2yadu79qaip/h?rlkey=y4b5w42qtikdqbszxe2ohnf2d&dl=0)
+
+> [!IMPORTANT]
+> The clips may not be renamed and all files have to be copied to the root directory of the stick, not in folders/subdirectories.
