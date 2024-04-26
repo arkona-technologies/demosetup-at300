@@ -289,9 +289,12 @@ const tx_rx_patching = async (
   const rxss = await vm_destination.r_t_p_receiver.sessions.rows();
   const txvs = await vm_source.r_t_p_transmitter.video_transmitters.rows();
   const vsg = vm_source.video_signal_generator.instances.row(0);
+  const vsg_1 = vm_source.video_signal_generator.instances.row(1);
 
   await vsg.standard.command.write(USE_STD);
   await vsg.pattern.write("Colorbars100");
+  await vsg_1.standard.command.write(USE_STD);
+  await vsg_1.pattern.write("Counters");
   await asyncZip(txvs, rxss, async (txv, rxs) => {
     await txv.v_src.command.write(video_ref(vsg.output));
     await pause(new Duration(100, "ms"));
