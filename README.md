@@ -123,7 +123,7 @@ graph LR
 
 ## Demo Setup #2 (1080p50/1080p59.94)
 
-This demo setup is mostly the same as the demo setup #1. The main difference is, that instead of one blade sending streams to itself it uses two cross-wired blades which send streams to each other.
+This demo setup is largely identical to demo setup #1. The main difference is that one blade does not send streams to itself, but two blades wired together are used to send streams to each other. To do this, connect the respective 100G ports 0 to 0 and 1 to 1. 
 
 The base setup of each blade is identical as described in [demo setup #1 - Blade Configuration](#blade-configuration) with on difference: only SDI outputs 8 and 9 are configured to be able to utilize one 16bidi and one MSC2 IO module.
 
