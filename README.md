@@ -14,7 +14,7 @@ The requirements for this demo are as follows:
 - AT300 blade with the AVP app
 - 1x I/O module 
 - compatible QSFP28 module
-- Formatted USB stick with the [sample clips](https://www.dropbox.com/scl/fo/rlgvdjcl8u2yadu79qaip/h?rlkey=y4b5w42qtikdqbszxe2ohnf2d&dl=0)
+- Formatted USB stick with the [sample clips](https://www.dropbox.com/scl/fo/rlgvdjcl8u2yadu79qaip/h?rlkey=y4b5w42qtikdqbszxe2ohnf2d&dl=0) (We recommend formatting the USB stick in FAT format)
 
 > [!WARNING]
 > Please note! The clips may not be renamed and all files have to be copied to the root directory of the stick, not in folders/subdirectories.
@@ -132,7 +132,7 @@ As a result, the full requirements are:
 - 2x AT300 blade with the AVP app
 - 2x I/O module 
 - compatible QSFP28 module
-- 2x Formatted USB stick with the [sample clips](https://www.dropbox.com/scl/fo/rlgvdjcl8u2yadu79qaip/h?rlkey=y4b5w42qtikdqbszxe2ohnf2d&dl=0)
+- 2x Formatted USB stick with the [sample clips](https://www.dropbox.com/scl/fo/rlgvdjcl8u2yadu79qaip/h?rlkey=y4b5w42qtikdqbszxe2ohnf2d&dl=0) (We recommend formatting the USB stick in FAT format)
 
 > [!IMPORTANT]
 > The clips may not be renamed and all files have to be copied to the root directory of the stick, not in folders/subdirectories.
