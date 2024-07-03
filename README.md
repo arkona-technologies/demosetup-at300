@@ -125,7 +125,10 @@ graph LR
 
 This demo setup is largely identical to demo setup #1. The main difference is that one blade does not send streams to itself, but two blades wired together are used to send streams to each other. To do this, connect the respective 100G ports 0 to 0 and 1 to 1. 
 
-The base setup of each blade is identical as described in [demo setup #1 - Blade Configuration](#blade-configuration) with on difference: only SDI outputs 8 and 9 are configured to be able to utilize one 16bidi and one MSC2 IO module.
+The base setup of each blade is identical as described in [demo setup #1 - Blade Configuration](#blade-configuration) with few differences:
+
+- only SDI outputs 8 and 9 are configured to be able to utilize one 16bidi and one MSC2 IO module.
+- RTP streams are sent between the two blades
 
 As a result, the full requirements are:
 
