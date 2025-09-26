@@ -13,8 +13,7 @@
 // PRO SDI INPUT / OUTPUT AUDIOSHUFFLER AUFSETZEN - done
 // Naming of Transmitter - done
 // Restart Ember - done
-// Setup 2x UHD Receiver for MV-Heads
-//
+// Setup 2x UHD Receiver for MV-Heads done (Varibales auslesen der Nummern noch einbauen grad hard gecodet drin)
 
 import * as VAPI from "vapi";
 import {
@@ -274,8 +273,8 @@ async function setup_video_audio_receiver(vm: VAPI.AT1130.Root) {
         jpeg_xs_caliber: null,
         st2042_2_caliber: null,
       });
-      await vm.r_t_p_receiver?.video_receivers.row(i).rename(`HEAD_${i}`);
-      await vm.r_t_p_receiver?.sessions.row(i).rename(`HEAD_${i}`);
+      await vm.r_t_p_receiver?.video_receivers.row(i).rename(`HEAD_0`);
+      await vm.r_t_p_receiver?.sessions.row(i).rename(`HEAD_1`);
     } else {
       await create_video_receiver(vm, {
         st2110_20_caliber: "ST2110_upto_3G",
@@ -360,6 +359,32 @@ async function restart_ember(vm: VAPI.AT1130.Root) {
   await vm.system.services.ember.command.write(true);
 }
 
+//Function to stream out before BNC
+async function setup_video_transmitter_before_bnc(vm: VAPI.AT1130.Root) {
+  enforce(
+    !!vm.audio_shuffler &&
+      !!vm.i_o_module &&
+      !!vm.re_play &&
+      !!vm.video_signal_generator &&
+      !!vm.audio_signal_generator
+  );
+  enforce(!!vm.r_t_p_transmitter);
+  const videosource_vsg = vm.video_signal_generator.instances.row(0).output;
+  const sdi_inputs = await vm.i_o_module.input.rows();
+  console.log(`number of sdi inputs: ${sdi_inputs.length}`);
+
+  await asyncIter(sdi_inputs, async () => {
+    await stream_video(videosource_vsg);
+  });
+  
+  const txs_v = await vm.r_t_p_transmitter.video_transmitters.rows();
+  await asyncZip(sdi_inputs, txs_v, async (inp, tx) => {
+    const src = await inp.sdi.hw_status.standard.read();
+    tx.v_src.command.write(
+      video_ref(src === null ? videosource_vsg : inp.sdi.output.video)
+    );
+  });
+}
 //SETUP STARTS HERE
 //Scrub AT300
 await scrub(vm);
@@ -378,6 +403,7 @@ await setup_io_module(vm);
 await setup_samplerate_converter(vm);
 await setup_input_audio_shuffler(vm);
 await setup_video_audio_transmitters(vm);
+await setup_video_transmitter_before_bnc(vm);
 await setup_video_audio_receiver(vm);
 await patch_rx_audio_video_to_sdi_out(vm);
 await restart_ember(vm);
