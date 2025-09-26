@@ -1,3 +1,5 @@
 node_modules
 *-lock.*
 package.json
+./ip_router_setup/video_clips 
+./ip_router_setup/version
