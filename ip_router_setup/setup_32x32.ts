@@ -202,18 +202,41 @@ async function setup_input_audio_shuffler(vm: VAPI.AT1130.Root) {
   enforce(!!vm.sample_rate_converter);
   const number_srcs = (await vm.sample_rate_converter.instances.rows()).length;
   await asyncIter(new Array<number>(number_srcs), async (_, i) => {
-    enforce(!!vm.sample_rate_converter && !!vm.genlock && !!vm.audio_shuffler);
+    enforce(!!vm.i_o_module &&!!vm.sample_rate_converter && !!vm.genlock && !!vm.audio_shuffler && !!vm.audio_gain);
+    const src = await vm.i_o_module.input.row(i).sdi.hw_status.standard.read();
+
     const audio_shuffler = await vm.audio_shuffler.instances.create_row();
     await audio_shuffler.genlock.command.write(vm.genlock.instances.row(0));
     let update: any = {};
     for (let index = 0; index < 16; index++) {
-      update[index] = vm.sample_rate_converter.instances
-        .row(i)
-        .output.channels.reference_to_index(index);
+      update[index] = src === null ? vm.audio_gain?.instances.row(i).output.channels.reference_to_index(index)
+      : vm.sample_rate_converter.instances.row(i).output.channels.reference_to_index(index);
     }
     await audio_shuffler.a_src.command.write(update);
+    await audio_shuffler.rename(src===null ? `ASG_GAIN_${i}`: `SDI_SRC_${i}`)
   });
 }
+
+async function setup_asg_audio_gain(vm: VAPI.AT1130.Root) {
+  const create_level_array = (start: number, decrement: number, target: number, totalLength: number): number[] => {
+    const sequenceLength = Math.floor((start - target) / decrement) + 1;
+    const sequence = Array.from({ length: sequenceLength }, (_, i) => start - decrement * i).filter(value => value >= target); 
+    const padding = Math.max(0, totalLength - sequence.length);
+    return [...sequence, ...Array(padding).fill(0)];
+  }
+
+  enforce(!!vm.sample_rate_converter);
+  await asyncIter(await vm.sample_rate_converter.instances.rows(), async (_,i) => {
+    enforce(!!vm.audio_gain && !!vm.genlock && !!vm.audio_shuffler && !!vm.audio_signal_generator);
+    const audio_gain = await vm.audio_gain.instances.create_row();
+    await audio_gain.a_src.command.write(vm.audio_signal_generator.genlock.row(0).f48000.signal_1000hz.output)
+    await audio_gain.rename(`ASG_GAIN_${i}`)
+    const level: number[] = create_level_array(6,1,-20,80)
+    audio_gain.levels.write(level)
+  })
+
+}
+
 
 //Load Clips from USB Stick
 //Hier entsteht bestimmt noch super Code
@@ -277,13 +300,7 @@ async function setup_video_audio_transmitters(vm: VAPI.AT1130.Root) {
   await asyncZip(sdi_inputs, txs_a, async (inp, tx, idx) => {
     const src = await inp.sdi.hw_status.standard.read();
     tx.a_src.command.write(
-      audio_ref(
-        src === null
-          ? audiosource
-          : idx < audio_shuffler.length
-          ? audio_shuffler[idx].output
-          : audiosource
-      )
+      audio_ref(audio_shuffler[idx % audio_shuffler.length].output )
     );
     const name = `${
       src === null ? "ASG" : idx < audio_shuffler.length ? "A_Shuffler" : "ASG"
@@ -299,7 +316,9 @@ async function setup_audio_transmitter_src(vm: VAPI.AT1130.Root) {
   enforce(!!vm.sample_rate_converter && !!vm.audio_signal_generator);
   const audiosrc = await vm.sample_rate_converter.instances.rows();
   for (let src of audiosrc) {
-    const tx = await stream_audio(src.output, {
+    const s = await vm.i_o_module?.input.row(src.index).sdi.hw_status.standard.read()
+    const gains = enforce_nonnull(await vm.audio_gain?.instances.rows())
+    const tx = await stream_audio(s === null ? gains[src.index].output : src.output, {
       format: { format: "L24", num_channels: 16, packet_time: "p0_125" },
     });
     tx.rename(`de_embedder_${src.index}`);
@@ -408,30 +427,26 @@ async function setup_rx_sdi_audio_input(
     rx.rename(`de_embedder_${i}`);
   }
 }
-async function patch_raw_sdi_audio_streams(
-  vm_source: VAPI.AT1130.Root,
-  vm_destination: VAPI.AT1130.Root
-) {
-  const tx_a = enforce_nonnull(
-    await vm_source.r_t_p_transmitter?.audio_transmitters.rows()
-  ).filter(async (tx) => {
-    (await tx.row_name()).includes(`de_embedder`);
-  });
-  const rx_a = enforce_nonnull(
-    await vm_destination.r_t_p_receiver?.audio_receivers.rows()
-  ).filter(async (rx) => {
-    (await rx.row_name()).includes(`de_embedder`);
-  });
+async function patch_raw_sdi_audio_streams(vm_source: VAPI.AT1130.Root, vm_destination: VAPI.AT1130.Root) {
+  enforce(!!vm_destination.r_t_p_receiver && !!vm_source.r_t_p_transmitter);
+  const tx_a: VAPI.AT1130.RTPTransmitter.AudioStreamerAsNamedTableRow[] = []
+  for(let tx of await vm_source.r_t_p_transmitter.audio_transmitters.rows()){
+    if((await tx.row_name()).includes("de_embedder")) tx_a.push(tx)
+  }
+  const rx_a: VAPI.AT1130.RTPReceiver.AudioReceiverAsNamedTableRow[] = []
+  for(let rx of await vm_destination.r_t_p_receiver.audio_receivers.rows()){
+    if((await rx.row_name()).includes("de_embedder")) rx_a.push(rx)
+  }
+  console.log(`number audio transmitter raw sdi:${tx_a.length}`)
+  console.log(`number audio receiver raw sdi: ${rx_a.length}`)
 
-  console.log(`number audio transmitter raw sdi:${tx_a.length}`);
-  console.log(`number audio receiver raw sdi: ${rx_a.length}`);
+  await asyncZip(tx_a, rx_a, async (tx, rx) =>{
+    const sdp = await tx.generic.ip_configuration.sdp_a.read()
+    const s= enforce_nonnull (await rx.generic.hosting_session.status.read())
+    s.set_sdp("A", sdp)
+  })
 
-  await asyncZip(tx_a, rx_a, async (tx, rx) => {
-    const sdp = await tx.generic.ip_configuration.sdp_a.read();
-    const s = enforce_nonnull(await rx.generic.hosting_session.status.read());
-    s.set_sdp("A", sdp);
-  });
-}
+};
 //Constants for Setup
 const vms = enforce_nonnull(await get_connections());
 //SETUP STARTS HERE
@@ -450,6 +465,7 @@ await asyncIter(vms, async (vm, i) => {
   await setup_vsg(vm);
   await setup_io_module(vm);
   await setup_samplerate_converter(vm);
+  await setup_asg_audio_gain(vm)
   await setup_input_audio_shuffler(vm);
   await setup_video_audio_transmitters(vm);
   await setup_audio_transmitter_src(vm);
