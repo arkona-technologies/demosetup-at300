@@ -13,7 +13,7 @@
 // PRO SDI INPUT / OUTPUT AUDIOSHUFFLER AUFSETZEN - done
 // Naming of Transmitter - done
 // Restart Ember - done
-// Setup 2x UHD Receiver for MV-Heads done (Varibales auslesen der Nummern noch einbauen grad hard gecodet drin)
+// Setup 2x UHD Receiver for MV-Heads done
 
 import * as VAPI from "vapi";
 import {
@@ -273,8 +273,8 @@ async function setup_video_audio_receiver(vm: VAPI.AT1130.Root) {
         jpeg_xs_caliber: null,
         st2042_2_caliber: null,
       });
-      await vm.r_t_p_receiver?.video_receivers.row(i).rename(`HEAD_0`);
-      await vm.r_t_p_receiver?.sessions.row(i).rename(`HEAD_1`);
+      await vm.r_t_p_receiver?.video_receivers.row(i).rename(`HEAD_${i}`);
+      await vm.r_t_p_receiver?.sessions.row(i).rename(`HEAD_${i}`);
     } else {
       await create_video_receiver(vm, {
         st2110_20_caliber: "ST2110_upto_3G",
