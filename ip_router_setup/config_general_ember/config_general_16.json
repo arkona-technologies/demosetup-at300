@@ -1,0 +1,27 @@
+{
+  "server_port": 9000,
+  "ui_port": 5000,
+  "fast_routing": false,
+  "global_video_matrix_target": {
+    "instances": "created",
+    "path": "rx-end",
+    "exclude": []
+  },
+  "global_video_matrix_source": {
+    "instances": "created",
+    "path": "tx-end",
+    "exclude": []
+  },
+  "machines": [
+    {
+        "blade": "http://127.0.0.1",
+        "name": "AT300-1",
+        "blade_audio_matrix": [{
+            "name": "audio_matrix",
+            "outputs": ["SHUFFLER"],
+            "inputs": ["RTP", "SDI", "MADI"],
+            "max_input_channels": 16,
+            "max_output_channels":16
+        }]
+    }]
+}
