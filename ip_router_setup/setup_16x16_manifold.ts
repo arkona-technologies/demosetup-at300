@@ -11,10 +11,10 @@
 // PRO SDI INPUT VIDEO/AUDIO TRANSMITTER AUFSETZEN - done
 // PRO SDI OUTPUT VIDEO/AUDIO RECEIVER AUFSETZEN - done
 // PRO SDI INPUT / OUTPUT AUDIOSHUFFLER AUFSETZEN - done
-// Naming of Transmitter - done 
+// Naming of Transmitter - done
 // Restart Ember - done
 // Setup 2x UHD Receiver for MV-Heads
-// 
+//
 
 import * as VAPI from "vapi";
 import {
@@ -225,15 +225,15 @@ async function setup_video_audio_transmitters(vm: VAPI.AT1130.Root) {
     if ((await sess.active.status.read()) === false) sess.delete();
   });
 
-  const sessions = await vm.r_t_p_transmitter.sessions.rows()
+  const sessions = await vm.r_t_p_transmitter.sessions.rows();
   await asyncZip(sdi_inputs, txs_v, async (inp, tx, idx) => {
     const src = await inp.sdi.hw_status.standard.read();
     tx.v_src.command.write(
       video_ref(src === null ? videosource_vsg : inp.sdi.output.video)
     );
-    const name = `${src === null ? "VSG":"SDI"}_${idx}`
+    const name = `${src === null ? "VSG" : "SDI"}_${idx}`;
     await tx.rename(name);
-    if(idx < sessions.length) sessions[idx].rename(name);
+    if (idx < sessions.length) sessions[idx].rename(name);
   });
   await asyncZip(sdi_inputs, txs_a, async (inp, tx, idx) => {
     const src = await inp.sdi.hw_status.standard.read();
@@ -246,46 +246,68 @@ async function setup_video_audio_transmitters(vm: VAPI.AT1130.Root) {
           : audiosource
       )
     );
-    const name = `${src === null
-          ? "ASG"
-          : idx < audio_shuffler.length
-          ? "A_Shuffler"
-          : "ASG"}_${idx}`
+    const name = `${
+      src === null ? "ASG" : idx < audio_shuffler.length ? "A_Shuffler" : "ASG"
+    }_${idx}`;
     await tx.rename(name);
   });
 }
 //Setup Receiver
 async function setup_video_audio_receiver(vm: VAPI.AT1130.Root) {
   enforce(!!vm.r_t_p_receiver && !!vm.i_o_module && !!vm.genlock);
-
   const sdi_outputs = await vm.i_o_module.output.rows();
   console.log(`number of sdi outputs: ${sdi_outputs.length}`);
 
-  await asyncIter(sdi_outputs, async () => {
-    await create_video_receiver(vm, {
-      st2110_20_caliber: "ST2110_upto_3G",
-      read_speed: {
-        variant: "LockToGenlock",
-        value: { genlock: vm.genlock?.instances.row(0) },
-      },
-      supports_clean_switching: true,
-      supports_uhd_sample_interleaved: false,
-      supports_2022_6: false,
-      supports_2110_40: true,
-      jpeg_xs_caliber: null,
-      st2042_2_caliber: null,
-    });
+  await asyncIter(sdi_outputs, async (_, i) => {
+    const num_sdi_outputs = sdi_outputs.length;
+    if (i > num_sdi_outputs - 3) {
+      await create_video_receiver(vm, {
+        st2110_20_caliber: "ST2110_singlelink_uhd",
+        read_speed: {
+          variant: "LockToGenlock",
+          value: { genlock: vm.genlock?.instances.row(0) },
+        },
+        supports_clean_switching: true,
+        supports_uhd_sample_interleaved: true,
+        supports_2022_6: false,
+        supports_2110_40: false,
+        jpeg_xs_caliber: null,
+        st2042_2_caliber: null,
+      });
+      await vm.r_t_p_receiver?.video_receivers.row(i).rename(`HEAD_${i}`);
+      await vm.r_t_p_receiver?.sessions.row(i).rename(`HEAD_${i}`);
+    } else {
+      await create_video_receiver(vm, {
+        st2110_20_caliber: "ST2110_upto_3G",
+        read_speed: {
+          variant: "LockToGenlock",
+          value: { genlock: vm.genlock?.instances.row(0) },
+        },
+        supports_clean_switching: true,
+        supports_uhd_sample_interleaved: false,
+        supports_2022_6: false,
+        supports_2110_40: true,
+        jpeg_xs_caliber: null,
+        st2042_2_caliber: null,
+      });
+      await vm.r_t_p_receiver?.video_receivers.row(i).rename(`SDI_${i}`);
+      await vm.r_t_p_receiver?.sessions.row(i).rename(`SDI_${i}`);
+    }
   });
-  await asyncIter(sdi_outputs, async () => {
-    await create_audio_receiver(vm, {
-      channel_capacity: 16,
-      supports_clean_switching: true,
-      payload_limit: "AtMost960Bytes",
-      read_speed: {
-        variant: "LockToGenlock",
-        value: { genlock: vm.genlock?.instances.row(0) },
-      },
-    });
+  await asyncIter(sdi_outputs, async (_, i) => {
+    const num_sdi_outputs = sdi_outputs.length;
+    if (i < num_sdi_outputs) {
+      await create_audio_receiver(vm, {
+        channel_capacity: 16,
+        supports_clean_switching: true,
+        payload_limit: "AtMost960Bytes",
+        read_speed: {
+          variant: "LockToGenlock",
+          value: { genlock: vm.genlock?.instances.row(0) },
+        },
+      });
+    }
+    await vm.r_t_p_receiver?.audio_receivers.row(i).rename(`SDI_${i}`);
   });
   const rxs_v = await vm.r_t_p_receiver.video_receivers.rows();
   const rxs_a = await vm.r_t_p_receiver.audio_receivers.rows();
