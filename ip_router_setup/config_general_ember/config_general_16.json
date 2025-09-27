@@ -5,12 +5,12 @@
   "global_video_matrix_target": {
     "instances": "created",
     "path": "rx-end",
-    "exclude": []
+    "exclude": ["HEAD", "PIP"]
   },
   "global_video_matrix_source": {
     "instances": "created",
     "path": "tx-end",
-    "exclude": []
+    "exclude": ["PIP", "SDI_OUT", "PLACE"]
   },
   "machines": [
     {
