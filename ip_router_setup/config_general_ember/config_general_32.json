@@ -19,7 +19,7 @@
         "blade_audio_matrix": [{
             "name": "audio_matrix",
             "outputs": ["SHUFFLER"],
-            "inputs": ["RTP", "SDI", "MADI"],
+            "inputs": ["RTP", "SDI", "MADI", "SRC"],
             "max_input_channels": 16,
             "max_output_channels":16
         }]
@@ -30,7 +30,7 @@
         "blade_audio_matrix": [{
             "name": "audio_matrix",
             "outputs": ["SHUFFLER"],
-            "inputs": ["RTP", "SDI", "MADI"],
+            "inputs": ["RTP", "SDI", "MADI", "SRC"],
             "max_input_channels": 16,
             "max_output_channels":16
         }]
