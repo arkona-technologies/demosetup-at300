@@ -419,19 +419,32 @@ async function setup_samplerate_converter(vm: VAPI.AT1130.Root) {
 
 //Function to setup Input Audioshuffler
 async function setup_input_audio_shuffler(vm: VAPI.AT1130.Root) {
-  enforce(!!vm.sample_rate_converter);
-  const number_srcs = (await vm.sample_rate_converter.instances.rows()).length;
-  await asyncIter(new Array<number>(number_srcs), async (_, i) => {
+  enforce(!!vm.sample_rate_converter && !!vm.i_o_module);
+  const sdi_inputs = await vm.i_o_module.input.rows();
+  await asyncIter(await vm.sample_rate_converter.instances.rows(), async (_, i) => {
     enforce(!!vm.sample_rate_converter && !!vm.genlock && !!vm.audio_shuffler);
+    enforce(!!vm.re_play)
     const audio_shuffler = await vm.audio_shuffler.instances.create_row();
     await audio_shuffler.genlock.command.write(vm.genlock.instances.row(0));
-    let update: any = {};
-    for (let index = 0; index < 16; index++) {
-      update[index] = vm.sample_rate_converter.instances
-        .row(i)
-        .output.channels.reference_to_index(index);
+    const has_input = i < sdi_inputs.length
+    const src = has_input ? await sdi_inputs[i].sdi.hw_status.standard.read(): null
+    const players = await vm.re_play.audio.players.rows();
+    if(players.length > 0){
+      let update: any = {};
+      const p = players[i%players.length].output.audio
+      for (let index = 0; index < 16; index++) {
+        update[index] = p.channels.reference_to_index(index);
+      }
+      await audio_shuffler.a_src.command.write(update);
     }
-    await audio_shuffler.a_src.command.write(update);
+    if(src !== null){
+      let update: any = {};
+      const p = sdi_inputs[i%players.length].sdi.output.audio
+      for (let index = 0; index < 16; index++) {
+        update[index] = p.channels.reference_to_index(index);
+      }
+      await audio_shuffler.a_src.command.write(update);
+    }
   });
 }
 
@@ -487,13 +500,14 @@ async function setup_video_audio_transmitters(vm: VAPI.AT1130.Root) {
     enforce(!!vm.re_play)
     const src = await inp.sdi.hw_status.standard.read();
     const players = await vm.re_play.video.players.rows();
-    if(players.length > 0){
+    const has_player = players.length > 0
+    if(has_player){
       await tx.v_src.command.write(video_ref(players[idx%players.length].output.video));
     }
     if(src !== null)
       await tx.v_src.command.write(video_ref(inp.sdi.output.video)
     );
-    const name = `${src === null ? "VSG":"SDI"}_${idx}`
+    const name = `${has_player ? "PLAYER": (src === null ? "VSG":"SDI")}_${idx}`
     await tx.rename(name);
     if(idx < sessions.length) sessions[idx].rename(name);
   });
