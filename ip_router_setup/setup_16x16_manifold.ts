@@ -556,7 +556,6 @@ async function setup_video_audio_transmitters(vm: VAPI.AT1130.Root) {
 async function setup_video_before_BNC_transmitters(vm: VAPI.AT1130.Root) {
   enforce(!!vm.r_t_p_receiver && !!vm.video_signal_generator)
   const rx_a: VAPI.AT1130.RTPReceiver.VideoReceiverAsNamedTableRow[] = []
-  //const videosource_vsg = vm.video_signal_generator.instances.row(0).output;
 
   for(let rx of await vm.r_t_p_receiver.video_receivers.rows()){
     if((await rx.row_name()).includes("SDI")) rx_a.push(rx)
@@ -689,4 +688,4 @@ await patch_rx_audio_video_to_sdi_out(vm);
 await restart_ember(vm);
 await vm.close();
 
-console.log("finished setting up 16x16 IP-READY ROUTER Demosetup");
+console.log("finished setting up 16x16 + manifold IP-READY ROUTER Demosetup");
