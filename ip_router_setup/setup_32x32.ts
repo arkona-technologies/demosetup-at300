@@ -533,7 +533,7 @@ async function setup_asg_audio_gain(vm: VAPI.AT1130.Root) {
     await audio_gain.a_src.command.write(vm.audio_signal_generator.genlock.row(0).f48000.signal_1000hz.output)
     await audio_gain.rename(`ASG_GAIN_${i}`)
     const level: number[] = create_level_array(6,1,-20,80)
-    audio_gain.levels.write(level)
+    await audio_gain.levels.write(level)
   })
 
 }
@@ -600,7 +600,7 @@ async function setup_video_audio_transmitters(vm: VAPI.AT1130.Root) {
     if(src !== null)
       await tx.v_src.command.write(video_ref(inp.sdi.output.video)
     );
-    const name = `${has_player ? "PLAYER": (src === null ? "VSG":"SDI")}_${idx}`
+    const name = `${src !== null ? "SDI": (has_player ? "PLAYER":"VSG")}_${idx}`
     await tx.rename(name);
     if (idx < sessions.length) sessions[idx].rename(name);
   });
@@ -758,12 +758,15 @@ async function patch_raw_sdi_audio_streams(vm_source: VAPI.AT1130.Root, vm_desti
 const vms = enforce_nonnull(await get_connections());
 //SETUP STARTS HERE
 await checkup_ember();
-await asyncIter(vms, async (vm, i) => {
+// await asyncIter(vms, async (vm, i) => {
+let i=0;
+for(let vm of vms){
   await scrub(vm);
+  // if(i === 0) {i++; continue;}
   //PTP Setup to FreeRunMaster
   console.log("start setting up PTP Clock as FreeRun Master");
   await setup_ptp(vm, {
-    mode: i === 1 ? "FreerunMaster" : "SlaveOnly",
+    mode: i === 0 ? "FreerunMaster" : "SlaveOnly",
     await_calibration: true,
     vlan: 0,
     ptp_domain: 123,
@@ -771,8 +774,10 @@ await asyncIter(vms, async (vm, i) => {
   console.log("finished setting up ptp");
   await setup_vsg(vm);
   await setup_io_module(vm);
-  await VID_PLAYER.setup_video_player(vm)
-  await AUDIO_PLAYER.setup_audio_player(vm)
+  if(i===0){
+    await VID_PLAYER.setup_video_player(vm)
+    await AUDIO_PLAYER.setup_audio_player(vm)
+  }
   await setup_samplerate_converter(vm);
   await setup_asg_audio_gain(vm)
   await setup_input_audio_shuffler(vm);
@@ -781,7 +786,8 @@ await asyncIter(vms, async (vm, i) => {
   await setup_video_audio_receiver(vm);
   await patch_rx_audio_video_to_sdi_out(vm);
   vms_inputs[i] = enforce_nonnull(await vm.i_o_module?.input.rows()).length;
-});
+  i++
+}//);
 await asyncIter(vms_inputs, async (inputs, index) => {
   let vm: VAPI.AT1130.Root = index === 0 ? vms[1] : vms[0];
   await setup_rx_sdi_audio_input(vm, inputs);
@@ -796,4 +802,4 @@ await restart_ember(vms[0]);
 //close connections
 await asyncIter(vms, async (vm) => await vm.close());
 
-console.log("finished setting up 16x16 IP-READY ROUTER Demosetup");
+console.log("finished setting up 32x32 IP-READY ROUTER Demosetup");
