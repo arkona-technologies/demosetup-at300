@@ -33,265 +33,309 @@ import {
   create_video_receiver,
 } from "vutil/rtp_receiver";
 import * as FS from "fs";
-import {z} from 'zod';
-import { encode_biw, load_wave, upload, wave_file_to_biw } from "vutil/biw-utils";
-import * as path from 'path';
+import { z } from "zod";
+import {
+  encode_biw,
+  load_wave,
+  upload,
+  wave_file_to_biw,
+} from "vutil/biw-utils";
+import * as path from "path";
 
-namespace AUDIO_PLAYER{
-const dirPath = '/media/sda1/clips_audio';
+namespace AUDIO_PLAYER {
+  const dirPath = "/media/sda1/clips_audio";
 
-
-async function parseWaveFilesInDirectory(dirPath: string): Promise<string[]> {
-  try {
-    const absoluteDirPath = path.resolve(dirPath);
-    const dirStat = await FS.promises.stat(absoluteDirPath);
-
-    if (!dirStat.isDirectory()) {
-      throw new Error(`Directory ${dirPath} does not exist or is not a directory`);
-    }
-
-    const files = await FS.promises.readdir(absoluteDirPath);
-    const wavFiles = files.filter(file => path.extname(file).toLowerCase() === '.wav');
-
-    const results:string[] = []
-    const parsePromises = wavFiles.map(async (file) => {
-      const filePath = path.join(absoluteDirPath, file);
-      const fileStat = await FS.promises.stat(filePath);
-      if (fileStat.isFile()) {
-        results.push(filePath);
-      }
-    });
-    await Promise.all(parsePromises);
-    return results;
-  } catch (e) {
-    throw new Error(`Failed to parse .wav files: ${e.message}`);
-  }
-}
-
-async function doCreatePlayer(vm:VAPI.AT1130.Root, filename:string){
-    enforce(!!vm.re_play)
+  async function parseWaveFilesInDirectory(dirPath: string): Promise<string[]> {
     try {
-        const prev_free_mem = await vm.re_play.audio.info.free.read()
-        const wav = load_wave(filename);
-        const biw = wave_file_to_biw(wav);
-        const as_buffer = encode_biw(biw);
-        const n = `player-${path.basename(filename).split(".")[0]}`.substring(0, 31);
-        const player = await vm.re_play.audio.players.create_row({ name: n });
-        await player.capabilities.num_channels.command.write(
-        16 * Math.ceil(biw.header.Channels / 16),
+      const absoluteDirPath = path.resolve(dirPath);
+      const dirStat = await FS.promises.stat(absoluteDirPath);
+
+      if (!dirStat.isDirectory()) {
+        throw new Error(
+          `Directory ${dirPath} does not exist or is not a directory`
         );
-        await player.capabilities.frequency.command.write("F48000");
-        await player.capabilities.capacity.command.write({
+      }
+
+      const files = await FS.promises.readdir(absoluteDirPath);
+      const wavFiles = files.filter(
+        (file) => path.extname(file).toLowerCase() === ".wav"
+      );
+
+      const results: string[] = [];
+      const parsePromises = wavFiles.map(async (file) => {
+        const filePath = path.join(absoluteDirPath, file);
+        const fileStat = await FS.promises.stat(filePath);
+        if (fileStat.isFile()) {
+          results.push(filePath);
+        }
+      });
+      await Promise.all(parsePromises);
+      return results;
+    } catch (e) {
+      throw new Error(`Failed to parse .wav files: ${e.message}`);
+    }
+  }
+
+  async function doCreatePlayer(vm: VAPI.AT1130.Root, filename: string) {
+    enforce(!!vm.re_play);
+    try {
+      const prev_free_mem = await vm.re_play.audio.info.free.read();
+      const wav = load_wave(filename);
+      const biw = wave_file_to_biw(wav);
+      const as_buffer = encode_biw(biw);
+      const n = `player-${path.basename(filename).split(".")[0]}`.substring(
+        0,
+        31
+      );
+      const player = await vm.re_play.audio.players.create_row({ name: n });
+      await player.capabilities.num_channels.command.write(
+        16 * Math.ceil(biw.header.Channels / 16)
+      );
+      await player.capabilities.frequency.command.write("F48000");
+      await player.capabilities.capacity.command.write({
         variant: "Samples",
         value: { samples: biw.header.SamplesPerChannel },
-        });
-        const url = `http://${vm.raw.ip}/replay/audio?action=write&handler=${player.index}&store=clip_single_file`;
-        await upload(url, as_buffer);
-        await player.output.control.stop.write("Click");
-        await player.output.control.play_mode.command.write("Loop");
-        await player.output.control.play.write("Click");
-    } catch(e) {
-        throw new Error(`Failed to upload ${filename} files: ${e.message}`);
+      });
+      const url = `http://${vm.raw.ip}/replay/audio?action=write&handler=${player.index}&store=clip_single_file`;
+      await upload(url, as_buffer);
+      await player.output.control.stop.write("Click");
+      await player.output.control.play_mode.command.write("Loop");
+      await player.output.control.play.write("Click");
+    } catch (e) {
+      throw new Error(`Failed to upload ${filename} files: ${e.message}`);
     }
-}
-export async function setup_audio_player(vm: VAPI.AT1130.Root){
-  try {
-    const dirStat = await FS.promises.stat(dirPath).catch(() => null);
-    if (!dirStat || !dirStat.isDirectory()) {
-      throw new Error(`Directory ${dirPath} does not exist or is not accessible`);
-    }
-    const results = await parseWaveFilesInDirectory(dirPath);
-
-
-    console.log("Parsed .wav Files:");
-    await vm.re_play?.audio.players.delete_all()
-    for (const fileName of results) {
-      console.log(`\nFile: ${fileName}`);
-      await doCreatePlayer(vm,fileName)
-    }
-  } catch (e) {
-    console.error(`Error: ${e.message}`);
-    if (e instanceof Error && 'code' in e && e.code === 'ENOENT') {
-      console.warn(`Directory or file access issue: ${dirPath}`);
-    }
-  } finally {
   }
-
-
-
-}
-}
-
-namespace VID_PLAYER{
-
-
-const headerSchema = z.object({
-  Date: z.string().min(1),
-  Time: z.string().min(1),
-  Interlace: z.boolean(),
-  Blanking: z.boolean(),
-  Hostname: z.string().min(1),
-  Frames: z.number().int().min(0),
-  HTotal: z.number().int().positive(),
-  VTotal: z.number().int().positive(),
-  HActive: z.number().int().positive(),
-  VActive: z.number().int().positive(),
-  Standard: z.string().min(1),
-  TC: z.enum(["SDR", "HLG", "PQ"]).optional(),
-  ColorSpace: z.string().min(1).optional(),
-});
-
-
-
-type HeaderData = z.infer<typeof headerSchema>;
-type ParseResult = { header: HeaderData; binary: Buffer; rest: Buffer };
-//const dirPath = '/media/sda1/ip_ready_router_clips';
-const dirPath = '/media/sda1/ip_ready_router_clips';
-
-// Function to parse header from a file
-function parseHeaderFromStream(filePath: string): Promise<ParseResult> {
-  return new Promise((resolve, reject) => {
-    let jsonData = '';
-    const chunks: Buffer[] = [];
-    let totalBytesRead = 0;
-    const readStream = FS.createReadStream(filePath, { highWaterMark: 512 }); // 512 bytes per chunk
-
-    readStream.on('data', (chunk: Buffer) => {
-      totalBytesRead += chunk.length;
-      chunks.push(chunk); // Collect all chunks for binary data
-
-      if (totalBytesRead > 1000) {
-        readStream.close();
-        reject(new Error(`Header exceeds 1000 bytes in ${path.basename(filePath)}`));
-        return;
-      }
-
-      const chunkString = chunk.toString('utf8');
-      jsonData += chunkString;
-
-      // Check if the file starts with '{'
-      if (totalBytesRead === chunk.length && !jsonData.startsWith('{')) {
-        readStream.close();
-        reject(new Error(`File ${path.basename(filePath)} does not start with '{'`));
-        return;
-      }
-
-      const braceIndex = jsonData.indexOf('}');
-      if (braceIndex !== -1) {
-        // Found the end of JSON within 1000 bytes
-        const jsonPart = jsonData.slice(0, braceIndex + 1).trim();
-        try {
-          const header = headerSchema.parse(JSON.parse(jsonPart));
-          const totalLength = Buffer.concat(chunks).length;
-          const jsonLength = Buffer.byteLength(jsonPart, 'utf8');
-          const binaryBuffer = Buffer.from(Buffer.concat(chunks).subarray(jsonLength, Math.min(totalLength, 1000))); // Limit to 1000 bytes
-          readStream.close();
-
-          resolve({
-            header,
-            binary: binaryBuffer,
-            rest: Buffer.alloc(0), // Rest is not read beyond 1000 bytes
-          });
-        } catch (e) {
-          reject(new Error(`Failed to parse JSON in ${path.basename(filePath)}: ${e.message}`));
-        }
-      }
-    });
-
-    readStream.on('error', (e) => {
-      reject(new Error(`Stream error for ${path.basename(filePath)}: ${e.message}`));
-    });
-
-    readStream.on('end', () => {
-      if (totalBytesRead <= 1000 && jsonData.indexOf('}') === -1) {
-        reject(new Error(`No closing brace '}' found within 1000 bytes in ${path.basename(filePath)}`));
-      }
-    });
-  });
-}
-
-async function parseBidFilesInDirectory(dirPath: string): Promise<{ [fileName: string]: ParseResult }> {
-  try {
-    const absoluteDirPath = path.resolve(dirPath);
-    const dirStat = await FS.promises.stat(absoluteDirPath);
-
-    if (!dirStat.isDirectory()) {
-      throw new Error(`Directory ${dirPath} does not exist or is not a directory`);
-    }
-
-    const files = await FS.promises.readdir(absoluteDirPath);
-    const bidFiles = files.filter(file => path.extname(file).toLowerCase() === '.bid');
-    const results: { [fileName: string]: ParseResult } = {};
-
-    const parsePromises = bidFiles.map(async (file) => {
-      const filePath = path.join(absoluteDirPath, file);
-      const fileStat = await FS.promises.stat(filePath);
-      if (fileStat.isFile()) {
-        const result = await parseHeaderFromStream(filePath);
-        results[file] = result;
-      }
-    });
-    await Promise.all(parsePromises);
-
-    return results;
-  } catch (e) {
-    throw new Error(`Failed to parse .bid files: ${e.message}`);
-  }
-}
-
-async function doCreatePlayer(vm:VAPI.AT1130.Root, header:HeaderData, filename:string){
-     enforce(!!vm.re_play)
+  export async function setup_audio_player(vm: VAPI.AT1130.Root) {
     try {
-        const prev_free_mem = await vm.re_play.video.info.free.read()
-        const player = await vm.re_play.video.players.create_row()
-        await player.capabilities.command.write({capacity:{variant:"Frames", value:{frames:header.Frames}}, 
-                            input_caliber:{add_blanking:header.Blanking, constraints:{variant:"Standard", value:{standard:header.Standard as VAPI.Video.Standard}}}})
-        await pause(new Duration(1,'s'))
-        const new_free_mem = await vm.re_play.video.info.free.read()
-        if(prev_free_mem.as_bytes === new_free_mem.as_bytes){
-        throw new Error(`Not enough memory to load the clip ${filename}`);
-        }
-        await player.upload.load.file.command.write(`${dirPath}/${filename}`)
-        console.log(`${dirPath}/${filename}`)
-        await player.upload.load.load.write("Click")
-    //     await player.upload.load.progress.wait_until((val) => {
-    //         console.log(val)
-    //         return val === 100
-    // },)
-    } catch(e) {
-        throw new Error(`Failed to upload ${filename} files: ${e.message}`);
-    }
-}
+      const dirStat = await FS.promises.stat(dirPath).catch(() => null);
+      if (!dirStat || !dirStat.isDirectory()) {
+        throw new Error(
+          `Directory ${dirPath} does not exist or is not accessible`
+        );
+      }
+      const results = await parseWaveFilesInDirectory(dirPath);
 
-export async function setup_video_player(vm: VAPI.AT1130.Root){
-  try {
-    const dirStat = await FS.promises.stat(dirPath).catch(() => null);
-    if (!dirStat || !dirStat.isDirectory()) {
-      throw new Error(`Directory ${dirPath} does not exist or is not accessible`);
+      console.log("Parsed .wav Files:");
+      await vm.re_play?.audio.players.delete_all();
+      for (const fileName of results) {
+        console.log(`\nFile: ${fileName}`);
+        await doCreatePlayer(vm, fileName);
+      }
+    } catch (e) {
+      console.error(`Error: ${e.message}`);
+      if (e instanceof Error && "code" in e && e.code === "ENOENT") {
+        console.warn(`Directory or file access issue: ${dirPath}`);
+      }
+    } finally {
     }
-    const results = await parseBidFilesInDirectory(dirPath);
-    console.log("Parsed .bid Files:");
-    await vm.re_play?.video.players.delete_all()
-    for (const [fileName, result] of Object.entries(results)) {
-      console.log(`\nFile: ${fileName}`);
-      console.log("Header:", result.header);
-    //   console.log("Binary Data (hex):", result.binary.toString('hex'));
-    //   console.log("Remaining Data (hex):", result.rest.length > 0 ? result.rest.toString('hex') : "None");
-      await doCreatePlayer(vm,result.header,fileName)
-    }
-  } catch (e) {
-    console.error(`Error: ${e.message}`);
-    if (e instanceof Error && 'code' in e && e.code === 'ENOENT') {
-      console.warn(`Directory or file access issue: ${dirPath}`);
-    }
-  } finally {
   }
 }
 
+namespace VID_PLAYER {
+  const headerSchema = z.object({
+    Date: z.string().min(1),
+    Time: z.string().min(1),
+    Interlace: z.boolean(),
+    Blanking: z.boolean(),
+    Hostname: z.string().min(1),
+    Frames: z.number().int().min(0),
+    HTotal: z.number().int().positive(),
+    VTotal: z.number().int().positive(),
+    HActive: z.number().int().positive(),
+    VActive: z.number().int().positive(),
+    Standard: z.string().min(1),
+    TC: z.enum(["SDR", "HLG", "PQ"]).optional(),
+    ColorSpace: z.string().min(1).optional(),
+  });
 
+  type HeaderData = z.infer<typeof headerSchema>;
+  type ParseResult = { header: HeaderData; binary: Buffer; rest: Buffer };
+  //const dirPath = '/media/sda1/ip_ready_router_clips';
+  const dirPath = "/media/sda1/ip_ready_router_clips";
+
+  // Function to parse header from a file
+  function parseHeaderFromStream(filePath: string): Promise<ParseResult> {
+    return new Promise((resolve, reject) => {
+      let jsonData = "";
+      const chunks: Buffer[] = [];
+      let totalBytesRead = 0;
+      const readStream = FS.createReadStream(filePath, { highWaterMark: 512 }); // 512 bytes per chunk
+
+      readStream.on("data", (chunk: Buffer) => {
+        totalBytesRead += chunk.length;
+        chunks.push(chunk); // Collect all chunks for binary data
+
+        if (totalBytesRead > 1000) {
+          readStream.close();
+          reject(
+            new Error(`Header exceeds 1000 bytes in ${path.basename(filePath)}`)
+          );
+          return;
+        }
+
+        const chunkString = chunk.toString("utf8");
+        jsonData += chunkString;
+
+        // Check if the file starts with '{'
+        if (totalBytesRead === chunk.length && !jsonData.startsWith("{")) {
+          readStream.close();
+          reject(
+            new Error(`File ${path.basename(filePath)} does not start with '{'`)
+          );
+          return;
+        }
+
+        const braceIndex = jsonData.indexOf("}");
+        if (braceIndex !== -1) {
+          // Found the end of JSON within 1000 bytes
+          const jsonPart = jsonData.slice(0, braceIndex + 1).trim();
+          try {
+            const header = headerSchema.parse(JSON.parse(jsonPart));
+            const totalLength = Buffer.concat(chunks).length;
+            const jsonLength = Buffer.byteLength(jsonPart, "utf8");
+            const binaryBuffer = Buffer.from(
+              Buffer.concat(chunks).subarray(
+                jsonLength,
+                Math.min(totalLength, 1000)
+              )
+            ); // Limit to 1000 bytes
+            readStream.close();
+
+            resolve({
+              header,
+              binary: binaryBuffer,
+              rest: Buffer.alloc(0), // Rest is not read beyond 1000 bytes
+            });
+          } catch (e) {
+            reject(
+              new Error(
+                `Failed to parse JSON in ${path.basename(filePath)}: ${
+                  e.message
+                }`
+              )
+            );
+          }
+        }
+      });
+
+      readStream.on("error", (e) => {
+        reject(
+          new Error(`Stream error for ${path.basename(filePath)}: ${e.message}`)
+        );
+      });
+
+      readStream.on("end", () => {
+        if (totalBytesRead <= 1000 && jsonData.indexOf("}") === -1) {
+          reject(
+            new Error(
+              `No closing brace '}' found within 1000 bytes in ${path.basename(
+                filePath
+              )}`
+            )
+          );
+        }
+      });
+    });
+  }
+
+  async function parseBidFilesInDirectory(
+    dirPath: string
+  ): Promise<{ [fileName: string]: ParseResult }> {
+    try {
+      const absoluteDirPath = path.resolve(dirPath);
+      const dirStat = await FS.promises.stat(absoluteDirPath);
+
+      if (!dirStat.isDirectory()) {
+        throw new Error(
+          `Directory ${dirPath} does not exist or is not a directory`
+        );
+      }
+
+      const files = await FS.promises.readdir(absoluteDirPath);
+      const bidFiles = files.filter(
+        (file) => path.extname(file).toLowerCase() === ".bid"
+      );
+      const results: { [fileName: string]: ParseResult } = {};
+
+      const parsePromises = bidFiles.map(async (file) => {
+        const filePath = path.join(absoluteDirPath, file);
+        const fileStat = await FS.promises.stat(filePath);
+        if (fileStat.isFile()) {
+          const result = await parseHeaderFromStream(filePath);
+          results[file] = result;
+        }
+      });
+      await Promise.all(parsePromises);
+
+      return results;
+    } catch (e) {
+      throw new Error(`Failed to parse .bid files: ${e.message}`);
+    }
+  }
+
+  async function doCreatePlayer(
+    vm: VAPI.AT1130.Root,
+    header: HeaderData,
+    filename: string
+  ) {
+    enforce(!!vm.re_play);
+    try {
+      const prev_free_mem = await vm.re_play.video.info.free.read();
+      const player = await vm.re_play.video.players.create_row();
+      await player.capabilities.command.write({
+        capacity: { variant: "Frames", value: { frames: header.Frames } },
+        input_caliber: {
+          add_blanking: header.Blanking,
+          constraints: {
+            variant: "Standard",
+            value: { standard: header.Standard as VAPI.Video.Standard },
+          },
+        },
+      });
+      await pause(new Duration(1, "s"));
+      const new_free_mem = await vm.re_play.video.info.free.read();
+      if (prev_free_mem.as_bytes === new_free_mem.as_bytes) {
+        throw new Error(`Not enough memory to load the clip ${filename}`);
+      }
+      await player.upload.load.file.command.write(`${dirPath}/${filename}`);
+      console.log(`${dirPath}/${filename}`);
+      await player.upload.load.load.write("Click");
+      //     await player.upload.load.progress.wait_until((val) => {
+      //         console.log(val)
+      //         return val === 100
+      // },)
+    } catch (e) {
+      throw new Error(`Failed to upload ${filename} files: ${e.message}`);
+    }
+  }
+
+  export async function setup_video_player(vm: VAPI.AT1130.Root) {
+    try {
+      const dirStat = await FS.promises.stat(dirPath).catch(() => null);
+      if (!dirStat || !dirStat.isDirectory()) {
+        throw new Error(
+          `Directory ${dirPath} does not exist or is not accessible`
+        );
+      }
+      const results = await parseBidFilesInDirectory(dirPath);
+      console.log("Parsed .bid Files:");
+      await vm.re_play?.video.players.delete_all();
+      for (const [fileName, result] of Object.entries(results)) {
+        console.log(`\nFile: ${fileName}`);
+        console.log("Header:", result.header);
+        //   console.log("Binary Data (hex):", result.binary.toString('hex'));
+        //   console.log("Remaining Data (hex):", result.rest.length > 0 ? result.rest.toString('hex') : "None");
+        await doCreatePlayer(vm, result.header, fileName);
+      }
+    } catch (e) {
+      console.error(`Error: ${e.message}`);
+      if (e instanceof Error && "code" in e && e.code === "ENOENT") {
+        console.warn(`Directory or file access issue: ${dirPath}`);
+      }
+    } finally {
+    }
+  }
 }
-
-
 
 const vms_inputs: number[] = [];
 
@@ -460,84 +504,119 @@ async function setup_samplerate_converter(vm: VAPI.AT1130.Root) {
 async function setup_input_audio_shuffler(vm: VAPI.AT1130.Root) {
   enforce(!!vm.sample_rate_converter && !!vm.i_o_module && !!vm.audio_gain);
   const sdi_inputs = await vm.i_o_module.input.rows();
-  await asyncIter(await vm.sample_rate_converter.instances.rows(), async (_, i) => {
-    enforce(!!vm.sample_rate_converter && !!vm.genlock && !!vm.audio_shuffler && !!vm.audio_gain);
-    enforce(!!vm.re_play)
-    const audio_shuffler = await vm.audio_shuffler.instances.create_row();
-    await audio_shuffler.genlock.command.write(vm.genlock.instances.row(0));
-    const has_input = i < sdi_inputs.length
-    const src = has_input ? await sdi_inputs[i].sdi.hw_status.standard.read(): null
-    const players = await vm.re_play.audio.players.rows();
-    const gains = await vm.audio_gain.instances.rows();
-    if(gains.length > 0){
-      let update: any = {};
-      const p = gains[i%gains.length].output
-      for (let index = 0; index < 16; index++) {
-        update[index] = p.channels.reference_to_index(index);
+  await asyncIter(
+    await vm.sample_rate_converter.instances.rows(),
+    async (_, i) => {
+      enforce(
+        !!vm.sample_rate_converter &&
+          !!vm.genlock &&
+          !!vm.audio_shuffler &&
+          !!vm.audio_gain
+      );
+      enforce(!!vm.re_play);
+      const audio_shuffler = await vm.audio_shuffler.instances.create_row();
+      await audio_shuffler.genlock.command.write(vm.genlock.instances.row(0));
+      const has_input = i < sdi_inputs.length;
+      const src = has_input
+        ? await sdi_inputs[i].sdi.hw_status.standard.read()
+        : null;
+      const players = await vm.re_play.audio.players.rows();
+      const gains = await vm.audio_gain.instances.rows();
+      if (gains.length > 0) {
+        let update: any = {};
+        const p = gains[i % gains.length].output;
+        for (let index = 0; index < 16; index++) {
+          update[index] = p.channels.reference_to_index(index);
+        }
+        await audio_shuffler.a_src.command.write(update);
       }
-      await audio_shuffler.a_src.command.write(update);
-    }
-    if(players.length > 0){
-      let update: any = {};
-      const p = players[i%players.length].output.audio
-      for (let index = 0; index < 16; index++) {
-        update[index] = p.channels.reference_to_index(index);
+      if (players.length > 0) {
+        let update: any = {};
+        const p = players[i % players.length].output.audio;
+        for (let index = 0; index < 16; index++) {
+          update[index] = p.channels.reference_to_index(index);
+        }
+        await audio_shuffler.a_src.command.write(update);
       }
-      await audio_shuffler.a_src.command.write(update);
-    }
-    if(src !== null){
-      let update: any = {};
-      const p = sdi_inputs[i%players.length].sdi.output.audio
-      for (let index = 0; index < 16; index++) {
-        update[index] = p.channels.reference_to_index(index);
+      if (src !== null) {
+        let update: any = {};
+        const p = sdi_inputs[i % players.length].sdi.output.audio;
+        for (let index = 0; index < 16; index++) {
+          update[index] = p.channels.reference_to_index(index);
+        }
+        await audio_shuffler.a_src.command.write(update);
       }
-      await audio_shuffler.a_src.command.write(update);
     }
-  });
-
-
-
-
-
+  );
 
   enforce(!!vm.sample_rate_converter);
   const number_srcs = (await vm.sample_rate_converter.instances.rows()).length;
   await asyncIter(new Array<number>(number_srcs), async (_, i) => {
-    enforce(!!vm.i_o_module &&!!vm.sample_rate_converter && !!vm.genlock && !!vm.audio_shuffler && !!vm.audio_gain);
+    enforce(
+      !!vm.i_o_module &&
+        !!vm.sample_rate_converter &&
+        !!vm.genlock &&
+        !!vm.audio_shuffler &&
+        !!vm.audio_gain
+    );
     const src = await vm.i_o_module.input.row(i).sdi.hw_status.standard.read();
 
     const audio_shuffler = await vm.audio_shuffler.instances.create_row();
     await audio_shuffler.genlock.command.write(vm.genlock.instances.row(0));
     let update: any = {};
     for (let index = 0; index < 16; index++) {
-      update[index] = src === null ? vm.audio_gain?.instances.row(i).output.channels.reference_to_index(index)
-      : vm.sample_rate_converter.instances.row(i).output.channels.reference_to_index(index);
+      update[index] =
+        src === null
+          ? vm.audio_gain?.instances
+              .row(i)
+              .output.channels.reference_to_index(index)
+          : vm.sample_rate_converter.instances
+              .row(i)
+              .output.channels.reference_to_index(index);
     }
     await audio_shuffler.a_src.command.write(update);
-    await audio_shuffler.rename(src===null ? `ASG_GAIN_${i}`: `SDI_SRC_${i}`)
+    await audio_shuffler.rename(
+      src === null ? `ASG_GAIN_${i}` : `SDI_SRC_${i}`
+    );
   });
 }
 
 async function setup_asg_audio_gain(vm: VAPI.AT1130.Root) {
-  const create_level_array = (start: number, decrement: number, target: number, totalLength: number): number[] => {
+  const create_level_array = (
+    start: number,
+    decrement: number,
+    target: number,
+    totalLength: number
+  ): number[] => {
     const sequenceLength = Math.floor((start - target) / decrement) + 1;
-    const sequence = Array.from({ length: sequenceLength }, (_, i) => start - decrement * i).filter(value => value >= target); 
+    const sequence = Array.from(
+      { length: sequenceLength },
+      (_, i) => start - decrement * i
+    ).filter((value) => value >= target);
     const padding = Math.max(0, totalLength - sequence.length);
     return [...sequence, ...Array(padding).fill(0)];
-  }
+  };
 
   enforce(!!vm.sample_rate_converter);
-  await asyncIter(await vm.sample_rate_converter.instances.rows(), async (_,i) => {
-    enforce(!!vm.audio_gain && !!vm.genlock && !!vm.audio_shuffler && !!vm.audio_signal_generator);
-    const audio_gain = await vm.audio_gain.instances.create_row();
-    await audio_gain.a_src.command.write(vm.audio_signal_generator.genlock.row(0).f48000.signal_1000hz.output)
-    await audio_gain.rename(`ASG_GAIN_${i}`)
-    const level: number[] = create_level_array(6,1,-20,80)
-    await audio_gain.levels.write(level)
-  })
-
+  await asyncIter(
+    await vm.sample_rate_converter.instances.rows(),
+    async (_, i) => {
+      enforce(
+        !!vm.audio_gain &&
+          !!vm.genlock &&
+          !!vm.audio_shuffler &&
+          !!vm.audio_signal_generator
+      );
+      const audio_gain = await vm.audio_gain.instances.create_row();
+      await audio_gain.a_src.command.write(
+        vm.audio_signal_generator.genlock.row(0).f48000.signal_1000hz.output
+      );
+      await audio_gain.rename(`ASG_GAIN_${i}`);
+      const level: number[] = create_level_array(6, 1, -20, 80);
+      await audio_gain.levels.write(level);
+    }
+  );
 }
-
 
 //Load Clips from USB Stick
 //Hier entsteht bestimmt noch super Code
@@ -561,7 +640,9 @@ async function setup_video_audio_transmitters(vm: VAPI.AT1130.Root) {
   console.log(`number of sdi inputs: ${sdi_inputs.length}`);
 
   await asyncIter(sdi_inputs, async () => {
-    await stream_video(videosource_vsg);
+    await stream_video(videosource_vsg, {
+      constrain: false,
+    });
   });
 
   await asyncIter(sdi_inputs, async () => {
@@ -588,32 +669,59 @@ async function setup_video_audio_transmitters(vm: VAPI.AT1130.Root) {
     if ((await sess.active.status.read()) === false) sess.delete();
   });
 
-  const sessions = await vm.r_t_p_transmitter.sessions.rows();
+  let sessions = await vm.r_t_p_transmitter.sessions.rows();
   await asyncZip(sdi_inputs, txs_v, async (inp, tx, idx) => {
-    enforce(!!vm.re_play)
+    enforce(!!vm.re_play);
     const src = await inp.sdi.hw_status.standard.read();
     const players = await vm.re_play.video.players.rows();
-    const has_player = players.length > 0
-    if(has_player){
-      await tx.v_src.command.write(video_ref(players[idx%players.length].output.video));
+    const has_player = players.length > 0;
+    if (has_player) {
+      await tx.v_src.command.write(
+        video_ref(players[idx % players.length].output.video)
+      );
     }
-    if(src !== null)
-      await tx.v_src.command.write(video_ref(inp.sdi.output.video)
-    );
-    const name = `${src !== null ? "SDI": (has_player ? "PLAYER":"VSG")}_${idx}`
-    await tx.rename(name);
-    if (idx < sessions.length) sessions[idx].rename(name);
+    if (src !== null)
+      await tx.v_src.command.write(video_ref(inp.sdi.output.video));
+    const name = `${
+      src !== null ? "SDI" : has_player ? "PLAYER" : "VSG"
+    }_${idx}`;
+    await tx.rename(name+ (idx < 4 ? '_UHD':''));
+    if (idx < sessions.length) sessions[idx].rename(name + (idx < 4 ? '_UHD':''));
   });
   await asyncZip(sdi_inputs, txs_a, async (inp, tx, idx) => {
     const src = await inp.sdi.hw_status.standard.read();
-    tx.a_src.command.write(
-      audio_ref(audio_shuffler[idx % audio_shuffler.length].output )
+    await tx.a_src.command.write(
+      audio_ref(audio_shuffler[idx % audio_shuffler.length].output)
     );
     const name = `${
       src === null ? "ASG" : idx < audio_shuffler.length ? "A_Shuffler" : "ASG"
     }_${idx}`;
     await tx.rename(name);
   });
+
+  //Change videotransmitter 0-3 to UHD.
+  sessions = await vm.r_t_p_transmitter.sessions.rows()
+  for (const session of sessions) {
+    await session.active.command.write(false);
+  }
+  for (let i = 0; i < 4; i++) {
+    await vm.r_t_p_transmitter.video_transmitters
+      .row(i)
+      .configuration.transport_format.command.write({
+        variant: "ST2110_20",
+        value: {
+          packing_mode: "BPM",
+          transmit_scheduler_uhd: true,
+          add_st2110_40: true,
+        },
+      });
+    await vm.r_t_p_transmitter.video_transmitters
+      .row(i)
+      .constraints.max_bandwidth.command.write("b12_0Gb");
+  }
+  for (const session of sessions) {
+    await session.active.command.write(true);
+  }
 }
 
 //Setup Transmitter for Audiosrc
@@ -623,11 +731,16 @@ async function setup_audio_transmitter_src(vm: VAPI.AT1130.Root) {
   enforce(!!vm.sample_rate_converter && !!vm.audio_signal_generator);
   const audiosrc = await vm.sample_rate_converter.instances.rows();
   for (let src of audiosrc) {
-    const s = await vm.i_o_module?.input.row(src.index).sdi.hw_status.standard.read()
-    const gains = enforce_nonnull(await vm.audio_gain?.instances.rows())
-    const tx = await stream_audio(s === null ? gains[src.index].output : src.output, {
-      format: { format: "L24", num_channels: 16, packet_time: "p0_125" },
-    });
+    const s = await vm.i_o_module?.input
+      .row(src.index)
+      .sdi.hw_status.standard.read();
+    const gains = enforce_nonnull(await vm.audio_gain?.instances.rows());
+    const tx = await stream_audio(
+      s === null ? gains[src.index].output : src.output,
+      {
+        format: { format: "L24", num_channels: 16, packet_time: "p0_125" },
+      }
+    );
     tx.rename(`de_embedder_${src.index}`);
   }
 }
@@ -638,9 +751,9 @@ async function setup_video_audio_receiver(vm: VAPI.AT1130.Root) {
   const sdi_outputs = await vm.i_o_module.output.rows();
   console.log(`number of sdi outputs: ${sdi_outputs.length}`);
 
-  await asyncIter(sdi_outputs, async () => {
-    await create_video_receiver(vm, {
-      st2110_20_caliber: "ST2110_upto_3G",
+  await asyncIter(sdi_outputs, async (_, index) => {
+    const rx = await create_video_receiver(vm, {
+      st2110_20_caliber: "ST2110_singlelink_uhd",
       read_speed: {
         variant: "LockToGenlock",
         value: { genlock: vm.genlock?.instances.row(0) },
@@ -652,6 +765,7 @@ async function setup_video_audio_receiver(vm: VAPI.AT1130.Root) {
       jpeg_xs_caliber: null,
       st2042_2_caliber: null,
     });
+    await rx.rename(`rx_${index + (index < 4 ? '_UHD':'')}`)
   });
   await asyncIter(sdi_outputs, async () => {
     await create_audio_receiver(vm, {
@@ -664,6 +778,29 @@ async function setup_video_audio_receiver(vm: VAPI.AT1130.Root) {
       },
     });
   });
+  const all_rxs = await vm.r_t_p_receiver.sessions.rows();
+  for(const all of all_rxs) {
+    await all.active.command.write(false);
+    all.rename(`rx_${all.index < 4 ? all.index+'_UHD' : all.index}`)
+  };
+  for(let i = 0; i < 4; i++) {
+    await vm.r_t_p_receiver.video_receivers.row(i).media_specific.capabilities.command.write({
+      st2110_20_caliber: "ST2110_singlelink_uhd",
+      read_speed: {
+        variant: "LockToGenlock",
+        value: { genlock: vm.genlock?.instances.row(0) },
+      },
+      supports_clean_switching: true,
+      supports_uhd_sample_interleaved: true,
+      supports_2022_6: false,
+      supports_2110_40: true,
+      jpeg_xs_caliber: null,
+      st2042_2_caliber: null,
+    });
+  };
+  for(const all of all_rxs) {
+    await all.active.command.write(true);
+  };
   const rxs_v = await vm.r_t_p_receiver.video_receivers.rows();
   const rxs_a = await vm.r_t_p_receiver.audio_receivers.rows();
   await asyncZip(rxs_v, rxs_a, async (rx_v, rx_a) => {
@@ -734,33 +871,35 @@ async function setup_rx_sdi_audio_input(
     rx.rename(`de_embedder_${i}`);
   }
 }
-async function patch_raw_sdi_audio_streams(vm_source: VAPI.AT1130.Root, vm_destination: VAPI.AT1130.Root) {
+async function patch_raw_sdi_audio_streams(
+  vm_source: VAPI.AT1130.Root,
+  vm_destination: VAPI.AT1130.Root
+) {
   enforce(!!vm_destination.r_t_p_receiver && !!vm_source.r_t_p_transmitter);
-  const tx_a: VAPI.AT1130.RTPTransmitter.AudioStreamerAsNamedTableRow[] = []
-  for(let tx of await vm_source.r_t_p_transmitter.audio_transmitters.rows()){
-    if((await tx.row_name()).includes("de_embedder")) tx_a.push(tx)
+  const tx_a: VAPI.AT1130.RTPTransmitter.AudioStreamerAsNamedTableRow[] = [];
+  for (let tx of await vm_source.r_t_p_transmitter.audio_transmitters.rows()) {
+    if ((await tx.row_name()).includes("de_embedder")) tx_a.push(tx);
   }
-  const rx_a: VAPI.AT1130.RTPReceiver.AudioReceiverAsNamedTableRow[] = []
-  for(let rx of await vm_destination.r_t_p_receiver.audio_receivers.rows()){
-    if((await rx.row_name()).includes("de_embedder")) rx_a.push(rx)
+  const rx_a: VAPI.AT1130.RTPReceiver.AudioReceiverAsNamedTableRow[] = [];
+  for (let rx of await vm_destination.r_t_p_receiver.audio_receivers.rows()) {
+    if ((await rx.row_name()).includes("de_embedder")) rx_a.push(rx);
   }
-  console.log(`number audio transmitter raw sdi:${tx_a.length}`)
-  console.log(`number audio receiver raw sdi: ${rx_a.length}`)
+  console.log(`number audio transmitter raw sdi:${tx_a.length}`);
+  console.log(`number audio receiver raw sdi: ${rx_a.length}`);
 
-  await asyncZip(tx_a, rx_a, async (tx, rx) =>{
-    const sdp = await tx.generic.ip_configuration.sdp_a.read()
-    const s= enforce_nonnull (await rx.generic.hosting_session.status.read())
-    s.set_sdp("A", sdp)
-  })
-
-};
+  await asyncZip(tx_a, rx_a, async (tx, rx) => {
+    const sdp = await tx.generic.ip_configuration.sdp_a.read();
+    const s = enforce_nonnull(await rx.generic.hosting_session.status.read());
+    s.set_sdp("A", sdp);
+  });
+}
 //Constants for Setup
 const vms = enforce_nonnull(await get_connections());
 //SETUP STARTS HERE
 await checkup_ember();
 // await asyncIter(vms, async (vm, i) => {
-let i=0;
-for(let vm of vms){
+let i = 0;
+for (let vm of vms) {
   await scrub(vm);
   // if(i === 0) {i++; continue;}
   //PTP Setup to FreeRunMaster
@@ -774,20 +913,20 @@ for(let vm of vms){
   console.log("finished setting up ptp");
   await setup_vsg(vm);
   await setup_io_module(vm);
-  if(i===0){
-    await VID_PLAYER.setup_video_player(vm)
-    await AUDIO_PLAYER.setup_audio_player(vm)
+  if (i === 0) {
+    await VID_PLAYER.setup_video_player(vm);
+    await AUDIO_PLAYER.setup_audio_player(vm);
   }
   await setup_samplerate_converter(vm);
-  await setup_asg_audio_gain(vm)
+  await setup_asg_audio_gain(vm);
   await setup_input_audio_shuffler(vm);
   await setup_video_audio_transmitters(vm);
   await setup_audio_transmitter_src(vm);
   await setup_video_audio_receiver(vm);
   await patch_rx_audio_video_to_sdi_out(vm);
   vms_inputs[i] = enforce_nonnull(await vm.i_o_module?.input.rows()).length;
-  i++
-}//);
+  i++;
+} //);
 await asyncIter(vms_inputs, async (inputs, index) => {
   let vm: VAPI.AT1130.Root = index === 0 ? vms[1] : vms[0];
   await setup_rx_sdi_audio_input(vm, inputs);
