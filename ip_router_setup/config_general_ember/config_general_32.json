@@ -15,7 +15,7 @@
   },
   "machines": [
     {
-        "blade": "http://127.0.0.1",
+        "blade": "http://xxx.xxx.xxx.xxx", // insert here the ip address of the blade master Blade.
         "name": "AT300-1",
         "blade_audio_matrix": [{
             "name": "audio_matrix",
@@ -26,7 +26,7 @@
         }]
     },
     {
-        "blade": "http://XXX.XXX.XXX.XXX",
+        "blade": "http://XXX.XXX.XXX.XXX", // insert here the ip address of the other blades that you want to use in your setup.
         "name": "AT300-die-andere",
         "blade_audio_matrix": [{
             "name": "audio_matrix",
