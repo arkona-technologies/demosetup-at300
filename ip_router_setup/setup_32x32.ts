@@ -561,7 +561,10 @@ async function setup_video_audio_transmitters(vm: VAPI.AT1130.Root) {
   console.log(`number of sdi inputs: ${sdi_inputs.length}`);
 
   await asyncIter(sdi_inputs, async () => {
-    await stream_video(videosource_vsg);
+    await stream_video(videosource_vsg, {
+      constrain: false, 
+      transport_format: {variant: "ST2110_20", value: {}}
+    });
   });
 
   await asyncIter(sdi_inputs, async () => {

@@ -2,6 +2,7 @@
   "server_port": 9000,
   "ui_port": 5000,
   "fast_routing": false,
+  "allow_patching": true,
   "global_video_matrix_target": {
     "instances": "created",
     "path": "rx-end",
